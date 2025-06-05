@@ -1,0 +1,61 @@
+name: pharmacy_manager
+description: إدارة الصيدلية بنظام إشعارات متقدم وتصميم موحّد
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # لتعريب واجهات Flutter بما في ذلك DatePicker وغيرها
+  flutter_localizations:
+    sdk: flutter
+
+  provider: ^6.0.0
+  file_picker: ^10.1.9
+  permission_handler: ^12.0.0+1
+  external_path: ^2.2.0
+  share_plus: ^11.0.0
+  cross_file: ^0.3.4+2
+  flutter_local_notifications: ^19.2.1
+  workmanager: ^0.6.0
+  google_fonts: ^6.2.1
+  intl: ^0.20.2
+  path_provider: ^2.0.13
+
+  # لإظهار المخططات البيانية
+  fl_chart: ^1.0.0
+
+  # للتصدير إلى CSV
+  csv: ^6.0.0
+
+  # لإنشاء ملف PDF ومشاركته أو طباعته
+  pdf: ^3.8.1
+  printing: ^5.12.3
+
+  # ======= حزم Drift (SQLite) =======
+  drift: ^2.7.0
+  drift_flutter: ^0.2.4
+  sqflite: ^2.2.0
+
+  # لحفظ إعدادات المستخدم
+  shared_preferences: ^2.0.15
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # لتوليد كود Drift
+  drift_dev: ^2.7.0
+  build_runner: ^2.4.6
+
+flutter:
+  uses-material-design: true
+
+
+
+

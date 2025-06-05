@@ -1,0 +1,38 @@
+/build/               
+.dart_tool/           
+ECHO is on.
+# γ§§Ά IDE            
+.idea/                
+.vscode/              
+*.iml                 
+ECHO is on.
+# κιεΆ ιΆ γο΅ νιηει    
+pubspec.lock          
+.packages             
+ECHO is on.
+# κιεΆ Flutter ιΆνιο§ο΅ 
+.flutter-plugins      
+.flutter-plugins-dependencies 
+.metadata             
+ECHO is on.
+# κιεΆ iOS ικ›ηΆ΅        
+ios/Pods/             
+ios/Runner.xcworkspace/ 
+ios/Flutter/Flutter.framework/ 
+ios/Flutter/Generated.xcconfig    
+ios/Flutter/Flutter.podspec       
+ECHO is on.
+# κιεΆ Android ικ›ηΆ΅      
+android/.gradle/       
+android/.idea/         
+android/local.properties 
+android/app/*.keystore 
+ECHO is on.
+# κιεΆ γκ΅ ι §γο ιΆΆ γμ   
+*.log                 
+*.lock                
+*.iml                 
+*.class               
+*.jar                 
+*.war                 
+*.ear                 
