@@ -1,4 +1,5 @@
 /// lib/models/expiry_batch.dart
+library;
 
 // أضف الاستيراد حتى يتعرف الملف على ExpiryBatchData
 import 'package:pharmacy_manager/services/database.dart';

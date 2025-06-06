@@ -1,4 +1,4 @@
-/// lib/main.dart
+// lib/main.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,17 +13,13 @@ import 'services/settings_store.dart';
 import 'services/local_notifications_service.dart';
 import 'services/workmanager_callback.dart';
 
-import 'screens/home_screen.dart';
-
+// مفتاح الـ Navigator لتمريره إلى خدمة الإشعارات
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. إنشاء قاعدة البيانات (Drift)
-  final database = AppDatabase();
-
-  // 2. تهيئة WorkManager
+  // 1. تهيئة WorkManager
   Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: false,
@@ -36,10 +32,10 @@ Future<void> main() async {
     initialDelay: const Duration(minutes: 1),
   );
 
-  // 3. تهيئة الإشعارات
+  // 2. تهيئة الإشعارات المحلية
   await LocalNotificationsService.initialize(navigatorKey);
 
-  // 4. جدولة تذكير صباحي
+  // 3. جدولة تذكير صباحي عند 8:00
   await LocalNotificationsService.scheduleDailyReminder(
     id: 500,
     hour: 8,
@@ -49,7 +45,10 @@ Future<void> main() async {
     payload: 'go_to_notifications',
   );
 
-  // 5. تهيئة MedicineStore
+  // 4. إنشاء كائن قاعدة البيانات
+  final database = AppDatabase();
+
+  // 5. تهيئة MedicineStore باستخدام قاعدة البيانات
   final store = MedicineStore.instance(database);
 
   // 6. تهيئة SettingsStore
@@ -120,7 +119,8 @@ class PharmacyApp extends StatelessWidget {
           bodyMedium: AppTextStyles.body,
         ),
       ),
-      home: const HomeScreen(),
+      // تم تغيير HomeScreen إلى MainMenuScreen لأنّ الملف home_screen.dart غير موجود في المشروع
+      home: const MainMenuScreen(),
     );
   }
 }

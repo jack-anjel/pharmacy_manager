@@ -25,6 +25,7 @@ dependencies:
   google_fonts: ^6.2.1
   intl: ^0.20.2
   path_provider: ^2.0.13
+  shared_preferences: ^2.1.1
 
   # لإظهار المخططات البيانية
   fl_chart: ^1.0.0
@@ -41,8 +42,6 @@ dependencies:
   drift_flutter: ^0.2.4
   sqflite: ^2.2.0
 
-  # لحفظ إعدادات المستخدم
-  shared_preferences: ^2.0.15
 
 dev_dependencies:
   flutter_test:

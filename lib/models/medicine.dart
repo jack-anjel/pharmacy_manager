@@ -1,4 +1,5 @@
 /// lib/models/medicine.dart
+library;
 
 // أضف السطر التالي لكي يتعرف على MedicineData و ExpiryBatchData
 import 'package:pharmacy_manager/services/database.dart';

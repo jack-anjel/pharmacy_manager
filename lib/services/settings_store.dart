@@ -1,4 +1,5 @@
 /// lib/services/settings_store.dart
+library;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

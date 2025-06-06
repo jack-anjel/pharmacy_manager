@@ -1,43 +1,45 @@
-/// lib/services/local_notifications_service.dart
+// lib/services/local_notifications_service.dart
 
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'medicine_store.dart';
-import 'database.dart';
+import 'package:timezone/data/latest_all.dart' as tzData;
 
 class LocalNotificationsService {
-  static final _flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  static final _plugin = FlutterLocalNotificationsPlugin();
 
-  @pragma('vm:entry-point')
-  static Future<void> initialize(GlobalKey<NavigatorState>? navigatorKey) async {
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
+  /// يجب استدعاء tzData.initializeTimeZones() قبل أي جدولة زمنية
+  static Future<void> initialize(GlobalKey<NavigatorState>? navKey) async {
+    // 1. إعداد معلومات الصلاحيات لكل منصة
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    final iosSettings = DarwinInitializationSettings(
       requestSoundPermission: true,
+      requestBadgePermission: true,
+      requestAlertPermission: true,
     );
+
     const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
 
-    tz.initializeTimeZones();
-
-    await _flutterLocalNotificationsPlugin.initialize(
+    await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (response) async {
+      onDidReceiveNotificationResponse: (NotificationResponse response) async {
         final payload = response.payload;
-        if (payload == 'go_to_notifications' && navigatorKey != null) {
-          navigatorKey.currentState?.pushNamed('/notification');
+        if (payload == 'go_to_notifications' && navKey != null) {
+          navKey.currentState?.pushNamed('/notifications');
         }
       },
     );
+
+    // 2. تهيئة المنطقة الزمنية المحلية
+    tzData.initializeTimeZones();
+    final String localName = await FlutterNativeTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(localName));
   }
 
+  /// جدولة تذكير يومي ثابت
   static Future<void> scheduleDailyReminder({
     required int id,
     required int hour,
@@ -46,78 +48,79 @@ class LocalNotificationsService {
     required String body,
     String? payload,
   }) async {
-    final androidDetails = AndroidNotificationDetails(
-      'daily_channel',
-      'تذكير يومي',
-      channelDescription: 'تذكير صباحي لفتح التنبيهات',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-    final iosDetails = DarwinNotificationDetails();
-    final platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    final time = Time(hour, minute, 0); // صيغة 24‐ساعي: hh:mm:ss
 
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduledDate =
-        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-
-    await _flutterLocalNotificationsPlugin.zonedSchedule(
+    await _plugin.zonedSchedule(
       id,
       title,
       body,
-      scheduledDate,
-      platformDetails,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
+      _nextInstanceOfTime(hour, minute),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_reminder_channel',
+          'تذكير يومي',
+          channelDescription: 'تذكير صباحي بمراقبة الأدوية',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      androidAllowWhileIdle: true,
+      matchDateTimeComponents: DateTimeComponents.time, // يوميًا في نفس الوقت
       payload: payload,
     );
   }
 
-  @pragma('vm:entry-point')
+  /// حساب أول موعد مقبل للتذكير اليومي
+  static tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
+  }
+
+  /// تحقق يومي في الـ background (من WorkManager)
   static Future<void> checkAndNotifyDaily() async {
-    final db = AppDatabase();
-    final store = MedicineStore.instance(db);
+    // استدعِ هنا MedicineStore.instance() لكن بِدون NotifyListeners
+    final store = MedicineStore.instance();
+
+    final meds = store.medicinesWithBatches;
     final now = DateTime.now();
 
-    for (var entry in store.medicinesWithBatches) {
-      final m = entry.medicine;
-      if (m.isMuted) continue;
+    for (var entry in meds) {
+      final med = entry.medicine;
+      if (med.isMuted) continue;
 
-      // 1. فحص انخفاض كمية ≤ 60
-      final totalQty =
-          entry.batches.fold<int>(0, (sum, b) => sum + b.quantity);
+      // 1. إذا الكمية المنخفضة
+      final totalQty = entry.batches.fold<int>(0, (sum, b) => sum + b.quantity);
       if (totalQty <= 60) {
-        await _showImmediateNotification(
-          id: m.id,
-          title: 'كمية منخفضة: ${m.name}',
-          body: 'الكمية المتبقية <= 60',
+        await _sendImmediateNotification(
+          id: med.id,
+          title: 'كمية منخفضة لدواء: ${med.name}',
+          body: 'الكمية المتبقية $totalQty ≤ 60',
         );
         continue;
       }
 
-      // 2. فحص قرب الانتهاء أو انتهاء الصلاحية
-      for (var e in entry.batches) {
-        final diff = e.expiryDate.difference(now).inDays;
-        if (e.expiryDate.isBefore(now)) {
-          await _showImmediateNotification(
-            id: m.id * 100 + e.id,
-            title: 'منتهي الصلاحية: ${m.name}',
-            body:
-                'الدفعة بتاريخ ${e.expiryDate.toLocal().toString().split(' ')[0]} منتهية.',
+      // 2. إذا قرب انتهاء الصلاحية أو انتهت
+      for (var b in entry.batches) {
+        final expiry = b.expiryDate!;
+        final diffDays = expiry.difference(now).inDays;
+        if (expiry.isBefore(now)) {
+          await _sendImmediateNotification(
+            id: med.id + 1000, // استخدم معرّف مختلف
+            title: 'انتهت صلاحية دواء: ${med.name}',
+            body: 'الصلاحية انتهت منذ ${-diffDays} يوم',
           );
           break;
-        } else if (diff > 0 && diff <= 180) {
-          await _showImmediateNotification(
-            id: m.id * 100 + e.id,
-            title: 'قريبة الانتهاء: ${m.name}',
-            body:
-                'الدفعة بتاريخ ${e.expiryDate.toLocal().toString().split(' ')[0]} قريب على الانتهاء.',
+        } else if (diffDays <= 180) {
+          await _sendImmediateNotification(
+            id: med.id + 2000,
+            title: 'قرب انتهاء صلاحية دواء: ${med.name}',
+            body: 'يتبقى $diffDays يومًا على انتهاء الصلاحية',
           );
           break;
         }
@@ -125,30 +128,26 @@ class LocalNotificationsService {
     }
   }
 
-  static Future<void> _showImmediateNotification({
+  /// إرسال إشعار فوري واحد
+  static Future<void> _sendImmediateNotification({
     required int id,
     required String title,
     required String body,
   }) async {
-    final androidDetails = AndroidNotificationDetails(
-      'immediate_channel',
-      'الإشعارات الفورية',
-      channelDescription: 'إشعارات عند انتهاء/قرب انتهاء أو انخفاض كمية',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-    final iosDetails = DarwinNotificationDetails();
-    final platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _flutterLocalNotificationsPlugin.show(
+    await _plugin.show(
       id,
       title,
       body,
-      platformDetails,
-      payload: 'go_to_notifications',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'immediate_channel',
+          'التنبيهات الفورية',
+          channelDescription: 'قناتك للإشعارات الفورية من الصيدلية',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
     );
   }
 }

@@ -425,17 +425,15 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                     itemBuilder: (ctx, i) {
                       final e = expiries[i];
                       Color tileColor = Colors.transparent;
-                      if (e.expiryDate != null) {
-                        final now = DateTime.now();
-                        final diff = e.expiryDate!.difference(now).inDays;
-                        if (e.expiryDate!.isBefore(now)) {
-                          tileColor = Colors.red.withOpacity(0.1);
-                        } else if (diff <= 30) {
-                          tileColor = Colors.orange.withOpacity(0.1);
-                        }
+                      final now = DateTime.now();
+                      final diff = e.expiryDate.difference(now).inDays;
+                      if (e.expiryDate.isBefore(now)) {
+                        tileColor = Colors.red.withOpacity(0.1);
+                      } else if (diff <= 30) {
+                        tileColor = Colors.orange.withOpacity(0.1);
                       }
-                      final formatted = e.expiryDate != null
-                          ? DateFormat('yyyy-MM-dd').format(e.expiryDate!)
+                                          final formatted = e.expiryDate != null
+                          ? DateFormat('yyyy-MM-dd').format(e.expiryDate)
                           : '—';
 
                       return Dismissible(

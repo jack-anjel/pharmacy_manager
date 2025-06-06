@@ -511,16 +511,14 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                         date != null ? _formatDate(date) : '—';
 
                     Color tileColor = Colors.transparent;
-                    if (date != null) {
-                      final today = DateTime.now();
-                      final diff = date.difference(today).inDays;
-                      if (date.isBefore(today)) {
-                        tileColor = Colors.red.withOpacity(0.1);
-                      } else if (diff <= 180) {
-                        tileColor = Colors.orange.withOpacity(0.1);
-                      }
+                    final today = DateTime.now();
+                    final diff = date.difference(today).inDays;
+                    if (date.isBefore(today)) {
+                      tileColor = Colors.red.withOpacity(0.1);
+                    } else if (diff <= 180) {
+                      tileColor = Colors.orange.withOpacity(0.1);
                     }
-
+                  
                     return Dismissible(
                       key:
                           Key('batch_${i}_${formattedDate}_${batch.quantity}'),

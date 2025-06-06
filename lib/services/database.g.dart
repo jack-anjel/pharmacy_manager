@@ -438,7 +438,7 @@ class $ExpiryBatchesTable extends ExpiryBatches
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: true,
-    $customConstraints: 'REFERENCES medicines(id) ON DELETE CASCADE NOT NULL',
+    $customConstraints: 'REFERENCES medicines(id) ON DELETE CASCADE',
   );
   static const VerificationMeta _expiryDateMeta = const VerificationMeta(
     'expiryDate',

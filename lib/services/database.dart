@@ -1,13 +1,10 @@
-/// lib/services/database.dart
+// lib/services/database.dart
 
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-
-import '../models/expiry_batch.dart'; // فقط للتوضيح؛ لم نعد نستخدم ExpiryBatch هنا مباشرة.
-import '../models/medicine.dart';     // فقط للتوضيح.
 
 part 'database.g.dart';
 
@@ -21,16 +18,16 @@ class Medicines extends Table {
   BoolColumn get isMuted => boolean().withDefault(const Constant(false))();
 }
 
-/// جدول دفعات الصلاحية المرتبط بكل دواء
+/// جدول دفعات الصلاحية المرتبطة بكل دواء
 class ExpiryBatches extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get medicineId => integer().customConstraint(
-      'REFERENCES medicines(id) ON DELETE CASCADE NOT NULL')();
+  IntColumn get medicineId =>
+      integer().customConstraint('REFERENCES medicines(id) ON DELETE CASCADE')();
   DateTimeColumn get expiryDate => dateTime()();
   IntColumn get quantity => integer()();
 }
 
-/// قاعدة البيانات
+/// قاعدة البيانات التي تجمع الجدولين أعلاه
 @DriftDatabase(tables: [Medicines, ExpiryBatches])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -38,14 +35,18 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
-  // ——— CRUD للأدوية ———
+  // ===== دوال CRUD للأدوية =====
 
-  Future<List<MedicineData>> getAllMedicines() => select(medicines).get();
+  /// تُعيد قائمة كل الأدوية (كل صف في جدول Medicines يُمثَّل بواسطة DataClass اسمه `Medicine`)
+  Future<List<Medicine>> getAllMedicines() => select(medicines).get();
 
+  /// تستمع إلى جدول الأدوية ودفعاتها معًا في Stream واحد
   Stream<List<MedicineWithBatches>> watchAllMedicinesWithBatches() {
     final query = select(medicines).join([
-      leftOuterJoin(expiryBatches,
-          expiryBatches.medicineId.equalsExp(medicines.id)),
+      leftOuterJoin(
+        expiryBatches,
+        expiryBatches.medicineId.equalsExp(medicines.id),
+      ),
     ]);
 
     return query.watch().map((rows) {
@@ -67,37 +68,45 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<MedicineData> getMedicineById(int id) =>
+  /// جلب بيانات دواء واحد بحسَب الـ ID (يعيد `Medicine`)
+  Future<Medicine> getMedicineById(int id) =>
       (select(medicines)..where((t) => t.id.equals(id))).getSingle();
 
+  /// إضافة دواء جديد (يعيد ID السطر المضاف)
   Future<int> insertMedicine(MedicinesCompanion entry) =>
       into(medicines).insert(entry);
 
-  Future<bool> updateMedicineData(MedicineData med) =>
+  /// تحديث صف دواء موجود (تأخذ الـ DataClass `Medicine`)
+  Future<bool> updateMedicineData(Medicine med) =>
       update(medicines).replace(med);
 
+  /// حذف دواء بالـ ID
   Future<int> deleteMedicineById(int id) =>
       (delete(medicines)..where((t) => t.id.equals(id))).go();
 
-  // ——— CRUD لدفعات الصلاحية ———
+  // ===== دوال CRUD لدفعات الصلاحية =====
 
-  Future<List<ExpiryBatchData>> getBatchesForMedicine(int medicineId) {
+  /// تُعيد قائمة دفعات الصلاحية لـ `medicineId` معطى (يعيد `List<ExpiryBatche>`)
+  Future<List<ExpiryBatche>> getBatchesForMedicine(int medicineId) {
     return (select(expiryBatches)
           ..where((tbl) => tbl.medicineId.equals(medicineId)))
         .get();
   }
 
+  /// إدخال دفعة جديدة (تأخذ Companion)
   Future<int> insertBatch(ExpiryBatchesCompanion entry) =>
       into(expiryBatches).insert(entry);
 
-  Future<bool> updateBatch(ExpiryBatchData batch) =>
+  /// تحديث دفعة (تأخذ الـ DataClass `ExpiryBatche`)
+  Future<bool> updateBatch(ExpiryBatche batch) =>
       update(expiryBatches).replace(batch);
 
+  /// حذف دفعة بالـ ID
   Future<int> deleteBatchById(int id) =>
       (delete(expiryBatches)..where((t) => t.id.equals(id))).go();
 }
 
-/// فتح اتصال SQLite
+/// فتح اتصال بقاعدة بيانات محلية داخل مجلد التطبيق
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
@@ -106,10 +115,10 @@ LazyDatabase _openConnection() {
   });
 }
 
-/// هيكل مساعد يجمع دواءً مع دفعاته
+/// هيكل مساعد يجمع دواءً مع دفعاته (One-to-Many)
 class MedicineWithBatches {
-  final MedicineData medicine;
-  final List<ExpiryBatchData> batches;
+  final Medicine medicine;
+  final List<ExpiryBatche> batches;
 
   MedicineWithBatches({
     required this.medicine,
