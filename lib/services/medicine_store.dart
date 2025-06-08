@@ -1,21 +1,20 @@
-// lib/services/medicine_store.dart
-
 import 'package:flutter/material.dart';
-import 'package:drift/drift.dart'; // لأجل استخدام `Value<...>`
-import 'database.dart';
+import 'package:drift/drift.dart';    // لـ Value و Companions
+import 'database.dart' as dr;         // لاستيراد AppDatabase و DataClasses المولَّدة
 
-/// MedicineStore يستخدم قاعدة البيانات عبر Drift بدلاً من SharedPreferences
+import '../models/medicine.dart'      as model;
+import '../models/expiry_batch.dart'  as batch_model;
+
+/// هذا المخزّن يتواصل مع Drift ويُحافظ على قائمة من كلاسّاتنا الشخصية (model.Medicine)
 class MedicineStore extends ChangeNotifier {
-  final AppDatabase _db;
+  final dr.AppDatabase _db;
 
-  // قائمة الأدوية مع دفعاتها (Stream-based)
-  List<MedicineWithBatches> _medicinesWithBatches = [];
-  List<MedicineWithBatches> get medicinesWithBatches =>
-      List.unmodifiable(_medicinesWithBatches);
+  /// قائمة الأدوية (كلاسّاتنا الشخصية في lib/models/medicine.dart)
+  List<model.Medicine> _medicines = [];
+  List<model.Medicine> get medicines => List.unmodifiable(_medicines);
 
-  // Singleton pattern
   static MedicineStore? _instance;
-  factory MedicineStore.instance(AppDatabase db) {
+  factory MedicineStore.instance(dr.AppDatabase db) {
     _instance ??= MedicineStore._internal(db);
     return _instance!;
   }
@@ -23,33 +22,55 @@ class MedicineStore extends ChangeNotifier {
     _listenToMedicines();
   }
 
-  /// يستمع للتغييرات في الجداول ويُحدث القائمة أوتوماتيكيًا
+  /// يُراقب جدولَي Medicines و ExpiryBatches في قاعدة البيانات,
+  /// ثم يحوّل كل صفّ (دواء + دفعات) إلى model.Medicine
   void _listenToMedicines() {
-    _db.watchAllMedicinesWithBatches().listen((rows) {
-      _medicinesWithBatches = rows;
+    _db.watchAllMedicinesWithBatches().listen((rowsDrift) {
+      // rowsDrift هو List<MedicineWithBatches> من Drift
+      final List<model.Medicine> temp = [];
+      for (final entry in rowsDrift) {
+        final dr.Medicine driftMed   = entry.medicine;      // DataClass “Medicine” من Drift
+        final List<dr.ExpiryBatche> driftBatches = entry.batches;   // List<DataClass ExpiryBatche> من Drift
+
+        // نحول كل دفعة إلى الكلاس الشخصيّ batch_model.ExpiryBatch
+        final List<batch_model.ExpiryBatch> convertedBatches = driftBatches
+            .map((b) => batch_model.ExpiryBatch.fromDrift(b))
+            .toList();
+
+        // ننشئ model.Medicine من الداتا مولَّدة + الدفعات المحولة
+        final model.Medicine modelMed = model.Medicine.fromDrift(
+          driftMed,
+          convertedBatches,
+        );
+        temp.add(modelMed);
+      }
+      _medicines = temp;
       notifyListeners();
     });
   }
 
-  /// جلب تفاصيل دواء واحد (بشكل مباشر، عند الحاجة)
-  Future<MedicineWithBatches?> getMedicineDetail(int id) async {
+  /// يُعيد تفاصيل دواء وحيد (model.Medicine) حسب id
+  Future<model.Medicine?> getMedicineDetail(int id) async {
     try {
-      final med = await _db.getMedicineById(id);
-      final batches = await _db.getBatchesForMedicine(id);
-      return MedicineWithBatches(medicine: med, batches: batches);
+      final dr.Medicine driftMed     = await _db.getMedicineById(id);
+      final List<dr.ExpiryBatche> driftBatches = await _db.getBatchesForMedicine(id);
+      final convertedBatches = driftBatches
+          .map((b) => batch_model.ExpiryBatch.fromDrift(b))
+          .toList();
+      return model.Medicine.fromDrift(driftMed, convertedBatches);
     } catch (_) {
       return null;
     }
   }
 
-  /// إضافة دواء جديد، يعيد الـ ID الجديد
+  /// يضيف دواء جديد في قاعدة البيانات عن طريق Companion
   Future<int> addMedicine({
     required String name,
     required String category,
     String? price,
     String? company,
   }) async {
-    final companion = MedicinesCompanion(
+    final companion = dr.MedicinesCompanion(
       name: Value(name),
       category: Value(category),
       price: Value(price),
@@ -59,31 +80,35 @@ class MedicineStore extends ChangeNotifier {
     return await _db.insertMedicine(companion);
   }
 
-  /// تحديث بيانات دواء موجود (تحتاج أن تمرر الـ DataClass `Medicine`)
-  Future<void> updateMedicine(Medicine updated) async {
-    await _db.updateMedicineData(updated);
-    // لاحظ أن الـ Stream سيتعامل مع notifyListeners()
+  Future<void> updateMedicine(model.Medicine updated) async {
+    /// هنا نحتاج نحوّل model.Medicine إلى DataClass Drift قبل التحديث.
+    final dr.Medicine driftMed = dr.Medicine(
+      id: updated.id!,
+      name: updated.name,
+      category: updated.category,
+      price: updated.price,
+      company: updated.company,
+      isMuted: updated.isMuted,
+    );
+    await _db.updateMedicineData(driftMed);
   }
 
-  /// حذف دواء (ستُحذف دفعاته بسبب ON DELETE CASCADE)
   Future<void> deleteMedicine(int id) async {
     await _db.deleteMedicineById(id);
   }
 
-  /// كتم/إلغاء كتم الإشعار لدواء معين
   Future<void> toggleMute(int id) async {
-    final med = await _db.getMedicineById(id);
-    final updated = med.copyWith(isMuted: !med.isMuted);
-    await _db.updateMedicineData(updated);
+    final dr.Medicine driftMed = await _db.getMedicineById(id);
+    final toggled = driftMed.copyWith(isMuted: !driftMed.isMuted);
+    await _db.updateMedicineData(toggled);
   }
 
-  /// إضافة دفعة صلاحية جديدة لأي دواء
   Future<int> addBatch({
     required int medicineId,
     required DateTime expiryDate,
     required int quantity,
   }) async {
-    final companion = ExpiryBatchesCompanion(
+    final companion = dr.ExpiryBatchesCompanion(
       medicineId: Value(medicineId),
       expiryDate: Value(expiryDate),
       quantity: Value(quantity),
@@ -91,34 +116,37 @@ class MedicineStore extends ChangeNotifier {
     return await _db.insertBatch(companion);
   }
 
-  /// حذف دفعة صلاحية
   Future<void> deleteBatch(int batchId) async {
     await _db.deleteBatchById(batchId);
   }
 
-  /// تحديث دفعة صلاحية (تغيير التاريخ أو الكمية)
-  Future<void> updateBatch(ExpiryBatche batch) async {
-    await _db.updateBatch(batch);
+  Future<void> updateBatch(batch_model.ExpiryBatch batch) async {
+    // نحوّل كلاسنا الشخصي إلى DataClass Drift قبل التحديث
+    final dr.ExpiryBatche driftBatch = dr.ExpiryBatche(
+      id: batch.id!,
+      medicineId: batch.medicineId,
+      expiryDate: batch.expiryDate,
+      quantity: batch.quantity,
+    );
+    await _db.updateBatch(driftBatch);
   }
 
-  /// إعادة فحص الإشعارات صباحًا (مثال على وظيفة حساب التنبيهات)
+  /// يحسب عدد الأدوية التي تستوفي شرط التنبيه (انخفاض الكمية أو قرب انتهاء الصلاحية)
   int countNotificationsToShow() {
     final now = DateTime.now();
     int count = 0;
-    for (var entry in _medicinesWithBatches) {
-      final m = entry.medicine;
+    for (var m in _medicines) {
       if (m.isMuted) continue;
 
-      // فحص الانخفاض في الكمية
-      final totalQty =
-          entry.batches.fold<int>(0, (sum, b) => sum + b.quantity);
+      // 1. فحص انخفاض الكمية
+      final totalQty = m.totalQuantity;
       if (totalQty <= 60) {
         count++;
         continue;
       }
 
-      // فحص قرب الانتهاء أو انتهاء الصلاحية
-      for (var e in entry.batches) {
+      // 2. فحص قرب انتهاء الصلاحية (≤ 180 يوم)
+      for (var e in m.expiries) {
         final d = e.expiryDate;
         final diff = d.difference(now).inDays;
         if (d.isBefore(now) || (diff > 0 && diff <= 180)) {
@@ -130,5 +158,3 @@ class MedicineStore extends ChangeNotifier {
     return count;
   }
 }
-
-

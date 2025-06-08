@@ -1,9 +1,7 @@
-/// lib/models/expiry_batch.dart
-library;
+import 'package:drift/drift.dart';
+import '../services/database.dart' as dr; // للوصول إلى ExpiryBatchesCompanion
 
-// أضف الاستيراد حتى يتعرف الملف على ExpiryBatchData
-import 'package:pharmacy_manager/services/database.dart';
-
+/// كلاس شخصيّ لدفعة الصلاحية (نُميّزه عن DataClass المولَّد بواسطة Drift)
 class ExpiryBatch {
   final int? id;
   final int medicineId;
@@ -17,8 +15,8 @@ class ExpiryBatch {
     required this.quantity,
   });
 
-  /// تحويل من Drift (ExpiryBatchData)
-  factory ExpiryBatch.fromDrift(ExpiryBatchData data) {
+  /// ينشئ ExpiryBatch من DataClass المولَّد بواسطة Drift (ExpiryBatche)
+  factory ExpiryBatch.fromDrift(dr.ExpiryBatche data) {
     return ExpiryBatch(
       id: data.id,
       medicineId: data.medicineId,
@@ -27,25 +25,29 @@ class ExpiryBatch {
     );
   }
 
-  /// تحويل إلى JSON (عند الحفظ أو التصدير)
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'medicineId': medicineId,
-      'expiryDate': expiryDate.toIso8601String(),
-      'quantity': quantity,
-    };
-  }
-
-  factory ExpiryBatch.fromJson(Map<String, dynamic> json) {
-    return ExpiryBatch(
-      id: json['id'] as int?,
-      medicineId: json['medicineId'] as int? ?? 0,
-      expiryDate: DateTime.parse(json['expiryDate'] as String),
-      quantity: json['quantity'] as int,
+  /// يحوّل هذا الكلاس الشخصيّ إلى Companion كي ندخّله في جدول ExpiryBatches
+  dr.ExpiryBatchesCompanion toDriftCompanion() {
+    return dr.ExpiryBatchesCompanion(
+      id: id == null ? const Value.absent() : Value(id!),
+      medicineId: Value(medicineId),
+      expiryDate: Value(expiryDate),
+      quantity: Value(quantity),
     );
   }
-}
 
+  factory ExpiryBatch.fromJson(Map<String, dynamic> json) => ExpiryBatch(
+        id: json['id'] as int?,
+        medicineId: json['medicineId'] as int,
+        expiryDate: DateTime.parse(json['expiryDate'] as String),
+        quantity: json['quantity'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'medicineId': medicineId,
+        'expiryDate': expiryDate.toIso8601String(),
+        'quantity': quantity,
+      };
+}
 
 

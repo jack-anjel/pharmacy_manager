@@ -1,11 +1,7 @@
-/// lib/services/settings_store.dart
-library;
+// lib/services/settings_store.dart
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-const String _darkModeKey = 'dark_mode';
-const String _categoriesKey = 'categories_list';
 
 class SettingsStore extends ChangeNotifier {
   bool _isDarkMode = false;
@@ -15,34 +11,34 @@ class SettingsStore extends ChangeNotifier {
   List<String> get categories => List.unmodifiable(_categories);
 
   SettingsStore() {
-    _loadFromPrefs();
+    _loadSettings();
   }
 
-  Future<void> _loadFromPrefs() async {
+  Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    _isDarkMode = prefs.getBool(_darkModeKey) ?? false;
-    _categories = prefs.getStringList(_categoriesKey) ?? <String>[];
+    _isDarkMode = prefs.getBool('isDarkMode') ?? false;
+    _categories = prefs.getStringList('categories') ?? [];
     notifyListeners();
   }
 
-  Future<void> toggleDarkMode(bool val) async {
-    _isDarkMode = val;
+  Future<void> toggleDarkMode([bool? value]) async {
+    _isDarkMode = value ?? !_isDarkMode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_darkModeKey, _isDarkMode);
+    await prefs.setBool('isDarkMode', _isDarkMode);
     notifyListeners();
   }
 
   Future<void> addCategory(String newCat) async {
     _categories.insert(0, newCat);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_categoriesKey, _categories);
+    await prefs.setStringList('categories', _categories);
     notifyListeners();
   }
 
   Future<void> removeCategory(int index) async {
     _categories.removeAt(index);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_categoriesKey, _categories);
+    await prefs.setStringList('categories', _categories);
     notifyListeners();
   }
 }

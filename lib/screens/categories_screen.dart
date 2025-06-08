@@ -1,3 +1,5 @@
+// lib/screens/categories_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -14,12 +16,12 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
   late List<String> _cats;
-  final TextEditingController _newCategoryController = TextEditingController();
+  final TextEditingController _newCategoryController =
+      TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // نستعيد القائمة الحالية من الـ SettingsStore
     final store = context.read<SettingsStore>();
     _cats = List.from(store.categories);
   }
@@ -42,13 +44,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       return;
     }
 
-    // نضيف محليًا أولًا في AnimatedList
     setState(() {
       _cats.insert(0, text);
       _listKey.currentState?.insertItem(0);
     });
 
-    // ثم نطلب من SettingsStore الحفظ
     await store.addCategory(text);
     _newCategoryController.clear();
   }
@@ -81,7 +81,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
     final store = context.read<SettingsStore>();
 
-    // نحذف من AnimatedList أولًا مع التأثير
     setState(() {
       _cats.removeAt(index);
       _listKey.currentState?.removeItem(
@@ -94,11 +93,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       );
     });
 
-    // ثم نقول لـ SettingsStore يحذفه من SharedPreferences
     await store.removeCategory(index);
   }
 
-  Widget _buildCategoryTile(String cat, int index, {bool forRemoval = false}) {
+  Widget _buildCategoryTile(String cat, int index,
+      {bool forRemoval = false}) {
     return ListTile(
       leading: const Icon(Icons.label, color: AppColors.primary),
       title: Text(cat),

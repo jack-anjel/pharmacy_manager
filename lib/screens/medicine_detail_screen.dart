@@ -1,3 +1,5 @@
+// lib/screens/medicine_detail_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -6,17 +8,14 @@ import '../services/medicine_store.dart';
 import '../services/settings_store.dart';
 import '../models/medicine.dart';
 import '../models/expiry_batch.dart';
+import '../theme/design_system.dart';
 
 class MedicineDetailScreen extends StatefulWidget {
   final Medicine medicine;
-  final VoidCallback onUpdate;
-  final VoidCallback onDelete;
 
   const MedicineDetailScreen({
     super.key,
     required this.medicine,
-    required this.onUpdate,
-    required this.onDelete,
   });
 
   @override
@@ -28,30 +27,30 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
   late TextEditingController _priceController;
   late TextEditingController _companyController;
   late List<ExpiryBatch> _expiriesCopy;
-
+  late String _selectedCategory;
   bool _isEdited = false;
-  String? _selectedCategory;
 
-  final TextEditingController _expiryInputController =
-      TextEditingController();
-  final TextEditingController _quantityInputController =
-      TextEditingController();
+  final TextEditingController _expiryInputController = TextEditingController();
+  final TextEditingController _quantityInputController = TextEditingController();
   DateTime? _pickedDate;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.medicine.name);
-    _priceController =
-        TextEditingController(text: widget.medicine.price ?? '');
+    _priceController = TextEditingController(text: widget.medicine.price ?? '');
     _companyController =
         TextEditingController(text: widget.medicine.company ?? '');
     _selectedCategory = widget.medicine.category;
 
-    // نأخذ نسخة من دفعات الصلاحية
+    // نعمل نسخة من الدفعات لكي لا نغيّر الكائن الأصلي مباشرة
     _expiriesCopy = widget.medicine.expiries
-        .map((e) =>
-            ExpiryBatch(expiryDate: e.expiryDate, quantity: e.quantity))
+        .map((e) => ExpiryBatch(
+              id: e.id,
+              medicineId: e.medicineId,
+              expiryDate: e.expiryDate,
+              quantity: e.quantity,
+            ))
         .toList();
   }
 
@@ -123,68 +122,63 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
     await showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx2, setStateDialog) {
-            return AlertDialog(
-              title: const Text('إضافة تاريخ صلاحية وكمية'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _expiryInputController,
-                    decoration: InputDecoration(
-                      hintText:
-                          'أدخل تاريخ الصلاحية نصيًا أو اضغط على أيقونة التقويم',
-                      prefixIcon: const Icon(Icons.calendar_today),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.calendar_view_month),
-                        onPressed: () async {
-                          FocusScope.of(ctx2).unfocus();
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                            context: ctx2,
-                            initialDate: now,
-                            firstDate: DateTime(1900),
-                            lastDate: DateTime(2100),
-                            locale: const Locale('ar'),
-                          );
-                          if (picked != null) {
-                            _pickedDate = picked;
-                            final formatted =
-                                DateFormat('yyyy-MM-dd').format(picked);
-                            _expiryInputController.text = formatted;
-                          }
-                        },
-                      ),
-                    ),
+        return AlertDialog(
+          title: const Text('إضافة تاريخ صلاحية وكمية'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _expiryInputController,
+                decoration: InputDecoration(
+                  hintText:
+                      'أدخل تاريخ الصلاحية نصيًا أو اضغط على أيقونة التقويم',
+                  prefixIcon: const Icon(Icons.calendar_today),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.calendar_view_month),
+                    onPressed: () async {
+                      FocusScope.of(context).unfocus();
+                      final now = DateTime.now();
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: now,
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime(2100),
+                        locale: const Locale('ar'),
+                      );
+                      if (picked != null) {
+                        _pickedDate = picked;
+                        _expiryInputController.text =
+                            DateFormat('yyyy-MM-dd').format(picked);
+                      }
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _quantityInputController,
-                    decoration: const InputDecoration(
-                      hintText: 'الكمية (رقم صحيح)',
-                      prefixIcon: Icon(Icons.numbers),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
+                ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(ctx2).pop();
-                  },
-                  child: const Text('إلغاء'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _quantityInputController,
+                decoration: const InputDecoration(
+                  hintText: 'الكمية (رقم صحيح)',
+                  prefixIcon: Icon(Icons.numbers),
                 ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(ctx2).pop();
-                  },
-                  child: const Text('إضافة'),
-                ),
-              ],
-            );
-          },
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('إلغاء'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('إضافة'),
+            ),
+          ],
         );
       },
     );
@@ -233,16 +227,21 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
       }
       finalDate = parsed;
     } else {
-      finalDate = null;
+      finalDate = DateTime.now();
     }
 
     setState(() {
-      _expiriesCopy.add(ExpiryBatch(expiryDate: finalDate, quantity: qty));
+      _expiriesCopy.add(ExpiryBatch(
+        id: null,
+        medicineId: widget.medicine.id!,
+        expiryDate: finalDate!,
+        quantity: qty,
+      ));
       _markEdited();
     });
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,7 +249,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
       );
       return;
     }
-    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
+    if (_selectedCategory.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('الرجاء اختيار الفئة')),
       );
@@ -264,17 +263,23 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
       return;
     }
 
-    widget.medicine.name = name;
-    widget.medicine.category = _selectedCategory!;
-    widget.medicine.price = _priceController.text.trim().isEmpty
-        ? null
-        : _priceController.text.trim();
-    widget.medicine.company = _companyController.text.trim().isEmpty
-        ? null
-        : _companyController.text.trim();
-    widget.medicine.expiries = List<ExpiryBatch>.from(_expiriesCopy);
+    final updatedMed = Medicine(
+      id: widget.medicine.id,
+      name: name,
+      category: _selectedCategory,
+      price:
+          _priceController.text.trim().isEmpty ? null : _priceController.text.trim(),
+      company: _companyController.text.trim().isEmpty
+          ? null
+          : _companyController.text.trim(),
+      expiries: List.from(_expiriesCopy),
+      isMuted: widget.medicine.isMuted,
+    );
 
-    widget.onUpdate();
+    // ننادي store.updateMedicine مباشرة
+    final store = Provider.of<MedicineStore>(context, listen: false);
+    await store.updateMedicine(updatedMed);
+
     setState(() {
       _isEdited = false;
     });
@@ -295,10 +300,12 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
               child: const Text('إلغاء'),
             ),
             TextButton(
-              onPressed: () {
-                widget.onDelete();
-                Navigator.of(ctx).pop(); // إغلاق الحوار
-                Navigator.of(context).pop(); // العودة إلى شاشة التنبيهات
+              onPressed: () async {
+                // ننادي store.deleteMedicine مباشرة
+                final store = Provider.of<MedicineStore>(context, listen: false);
+                await store.deleteMedicine(widget.medicine.id!);
+                Navigator.of(ctx).pop(); // إغلاق مربع الحوار
+                Navigator.of(context).pop(); // العودة للخلف
               },
               child: const Text(
                 'حذف',
@@ -335,7 +342,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // نأخذ الفئات من SettingsStore
     final categories = context.watch<SettingsStore>().categories;
 
     return WillPopScope(
@@ -347,23 +353,38 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
             IconButton(
               icon: const Icon(Icons.copy_outlined),
               tooltip: 'نسخ الدواء',
-              onPressed: () {
+              onPressed: () async {
+                // ننشئ نسخة جديدة من هذا الدواء بدون id
                 final copied = Medicine(
-                  id: DateTime.now().millisecondsSinceEpoch,
+                  id: null,
                   name: '${widget.medicine.name} (نسخة)',
                   category: widget.medicine.category,
                   price: widget.medicine.price,
                   company: widget.medicine.company,
                   expiries: widget.medicine.expiries
                       .map((e) => ExpiryBatch(
+                            id: null,
+                            medicineId: 0,
                             expiryDate: e.expiryDate,
                             quantity: e.quantity,
                           ))
                       .toList(),
                   isMuted: widget.medicine.isMuted,
                 );
-                Provider.of<MedicineStore>(context, listen: false)
-                    .addMedicine(copied);
+                final store = Provider.of<MedicineStore>(context, listen: false);
+                final newId = await store.addMedicine(
+                  name: copied.name,
+                  category: copied.category,
+                  price: copied.price,
+                  company: copied.company,
+                );
+                for (var e in copied.expiries) {
+                  await store.addBatch(
+                    medicineId: newId,
+                    expiryDate: e.expiryDate,
+                    quantity: e.quantity,
+                  );
+                }
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('تم نسخ الدواء وإضافته')),
                 );
@@ -382,7 +403,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // حقل اسم الدواء
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -392,8 +412,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                 onChanged: (_) => _markEdited(),
               ),
               const SizedBox(height: 12),
-
-              // قائمة الفئات
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
                 decoration: const InputDecoration(
@@ -409,15 +427,15 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                     )
                     .toList(),
                 onChanged: (val) {
-                  setState(() {
-                    _selectedCategory = val;
-                    _markEdited();
-                  });
+                  if (val != null) {
+                    setState(() {
+                      _selectedCategory = val;
+                      _markEdited();
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 12),
-
-              // حقل السعر (اختياري)
               TextField(
                 controller: _priceController,
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
@@ -428,8 +446,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                 onChanged: (_) => _markEdited(),
               ),
               const SizedBox(height: 12),
-
-              // حقل الشركة (اختياري)
               TextField(
                 controller: _companyController,
                 decoration: const InputDecoration(
@@ -439,8 +455,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                 onChanged: (_) => _markEdited(),
               ),
               const SizedBox(height: 20),
-
-              // زر مسح جميع الدفعات
               if (_expiriesCopy.isNotEmpty)
                 Align(
                   alignment: Alignment.centerRight,
@@ -479,7 +493,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                   ),
                 ),
 
-              // قسم إضافة دفعات الصلاحية والكمية
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -496,7 +509,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
               ),
               const SizedBox(height: 8),
 
-              // عرض قائمة الدفعات
               if (_expiriesCopy.isEmpty)
                 const Text('لا توجد دفعات حالية.')
               else
@@ -507,8 +519,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                   itemBuilder: (ctx, i) {
                     final batch = _expiriesCopy[i];
                     final date = batch.expiryDate;
-                    final formattedDate =
-                        date != null ? _formatDate(date) : '—';
+                    final formattedDate = _formatDate(date);
 
                     Color tileColor = Colors.transparent;
                     final today = DateTime.now();
@@ -518,7 +529,7 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
                     } else if (diff <= 180) {
                       tileColor = Colors.orange.withOpacity(0.1);
                     }
-                  
+
                     return Dismissible(
                       key:
                           Key('batch_${i}_${formattedDate}_${batch.quantity}'),
@@ -560,7 +571,6 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
 
               const SizedBox(height: 24),
 
-              // زر حفظ التعديلات
               Center(
                 child: ElevatedButton(
                   onPressed: _isEdited ? _saveChanges : null,
@@ -582,4 +592,3 @@ class _MedicineDetailScreenState extends State<MedicineDetailScreen> {
     );
   }
 }
-

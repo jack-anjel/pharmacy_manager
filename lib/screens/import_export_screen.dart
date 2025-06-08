@@ -1,3 +1,5 @@
+// lib/screens/import_export_screen.dart
+
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -67,9 +69,34 @@ class _ImportExportScreenState extends State<ImportExportScreen> {
         final content = utf8.decode(result.files.first.bytes!);
         try {
           final List<dynamic> decoded = jsonDecode(content);
-          final imported = decoded.map((e) => Medicine.fromJson(e)).toList();
-          store.medicines = imported;
-          store.saveMedicines();
+          final imported = decoded
+              .map((e) => Medicine.fromJson(e as Map<String, dynamic>))
+              .toList();
+          // نحذف القائمة القديمة ونستبدلها بالمستوردة
+          // لأن-store.medicines هي Getter فقط، نعيد إستيراد كل دواء إلى قاعدة البيانات
+          // فالأفضل أن نحذف جميع الأدوية القديمة ثم نضيف الجديدة
+          // (هذا تنفيذ تجريبي، عدِّله حسب احتياجك)
+          for (var old in store.medicines) {
+            if (old.id != null) {
+              await store.deleteMedicine(old.id!);
+            }
+          }
+          for (var m in imported) {
+            final newId = await store.addMedicine(
+              name: m.name,
+              category: m.category,
+              price: m.price,
+              company: m.company,
+            );
+            for (var e in m.expiries) {
+              await store.addBatch(
+                medicineId: newId,
+                expiryDate: e.expiryDate,
+                quantity: e.quantity,
+              );
+            }
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('تمَّ الاستيراد بنجاح.')),
           );
@@ -91,9 +118,31 @@ class _ImportExportScreenState extends State<ImportExportScreen> {
             final file = io.File(path);
             final content = await file.readAsString();
             final List<dynamic> decoded = jsonDecode(content);
-            final imported = decoded.map((e) => Medicine.fromJson(e)).toList();
-            store.medicines = imported;
-            store.saveMedicines();
+            final imported = decoded
+                .map((e) => Medicine.fromJson(e as Map<String, dynamic>))
+                .toList();
+
+            for (var old in store.medicines) {
+              if (old.id != null) {
+                await store.deleteMedicine(old.id!);
+              }
+            }
+            for (var m in imported) {
+              final newId = await store.addMedicine(
+                name: m.name,
+                category: m.category,
+                price: m.price,
+                company: m.company,
+              );
+              for (var e in m.expiries) {
+                await store.addBatch(
+                  medicineId: newId,
+                  expiryDate: e.expiryDate,
+                  quantity: e.quantity,
+                );
+              }
+            }
+
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('تمَّ الاستيراد بنجاح.')),
             );
@@ -141,5 +190,3 @@ class _ImportExportScreenState extends State<ImportExportScreen> {
     );
   }
 }
-
-

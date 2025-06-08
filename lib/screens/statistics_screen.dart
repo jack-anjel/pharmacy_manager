@@ -1,3 +1,5 @@
+// lib/screens/statistics_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -7,6 +9,7 @@ import '../services/medicine_store.dart';
 import '../services/settings_store.dart';
 import '../models/medicine.dart';
 import '../theme/design_system.dart';
+import 'medicine_detail_screen.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -27,7 +30,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Future<void> _refreshData() async {
-    await store.loadAll();
     setState(() {
       now = DateTime.now();
     });
@@ -35,27 +37,29 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // نقرأ قائمة الفئات من SettingsStore
+    final allMeds = store.medicines; // List<Medicine>
+
+    // 1. إحصائيات عامة
+    final totalMeds = allMeds.length;
+    final totalBatches = allMeds.fold<int>(
+        0, (sum, m) => sum + m.expiries.length);
+
+    final lowStockCount =
+        allMeds.where((m) => m.totalQuantity <= 60).length;
+    final expiredCount = allMeds
+        .where((m) => m.expiries.any((e) => e.expiryDate.isBefore(now)))
+        .length;
+
+    // 2. عدّادات كل فئة
     final categories = context.watch<SettingsStore>().categories;
+    final Map<String, int> groupCounts = {};
+    for (var c in categories) {
+      groupCounts[c] =
+          allMeds.where((m) => m.category == c).length;
+    }
 
-    final meds = store.medicines;
-
-    // إحصائيات أساسية
-    final totalMeds = meds.length;
-    final totalBatches = meds.fold<int>(0, (sum, m) => sum + m.expiries.length);
-    final lowStockCount = meds.where((m) => m.totalQuantity <= 60).length;
-    final expiredCount = meds.where((m) {
-      return m.expiries.any((e) {
-        if (e.expiryDate == null) return false;
-        return e.expiryDate!.isBefore(now);
-      });
-    }).length;
-
-    // بيانات المخطط الدائري حسب المجموعات
-    final groupCounts = <String, int>{
-      for (var c in categories) c: meds.where((m) => m.category == c).length
-    };
-    final pieSections = <PieChartSectionData>[];
+    // 3. بناء بيانات الرسم البياني (PieChart)
+    final List<PieChartSectionData> pieSections = [];
     final colors = [
       Colors.teal.shade300,
       Colors.teal.shade500,
@@ -65,7 +69,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       Colors.purple.shade500,
       Colors.blueGrey.shade300,
       Colors.blueGrey.shade500,
-      // أضف المزيد إذا زادت الفئات
     ];
     int colorIndex = 0;
     groupCounts.forEach((category, count) {
@@ -74,7 +77,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           PieChartSectionData(
             color: colors[colorIndex % colors.length],
             value: count.toDouble(),
-            title: count.toString(),
+            title: '$count',
             titleStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -97,7 +100,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // بطاقات الإحصائيات الأساسية
               _buildStatCard(
                 icon: Icons.medical_services,
                 label: 'إجمالي عدد الأدوية',
@@ -125,7 +127,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
               const Divider(height: 32),
 
-              // المخطط الدائري
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8.0),
                 child: Text(
@@ -154,44 +155,42 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               const SizedBox(height: 24),
               const Divider(height: 32),
 
-              // التفاصيل حسب المجموعات
               const Text(
                 'تفاصيل حسب المجموعات:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              ...categories.map((c) {
-                final count = groupCounts[c] ?? 0;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.category,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '$c: $count دواء',
-                          style: AppTextStyles.body,
+              if (groupCounts.isEmpty)
+                const Text('لا توجد فئات. أضف فئة من الإعدادات.')
+              else
+                ...categories.map((c) {
+                  final count = groupCounts[c] ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.category, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '$c: $count دواء',
+                            style: AppTextStyles.body,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                      ],
+                    ),
+                  );
+                }),
 
               const SizedBox(height: 24),
               const Divider(height: 32),
 
-              // قائمة الأدوية “الحرجة”
               const Text(
                 'الأدوية التي تحتاج انتباهًا خاصًا:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              _buildSpecialList(meds, categories),
+              _buildSpecialList(allMeds),
             ],
           ),
         ),
@@ -199,7 +198,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  /// بطاقة إحصائية بسيطة
   Widget _buildStatCard({
     required IconData icon,
     required String label,
@@ -234,27 +232,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  /// تبني قائمة الأدوية “الحرجة”
-  Widget _buildSpecialList(List<Medicine> meds, List<String> categories) {
+  Widget _buildSpecialList(List<Medicine> allMeds) {
     final now = DateTime.now();
     final List<Medicine> qtyZero = [];
     final List<Medicine> qtyLow = [];
     final List<Medicine> expired = [];
 
-    for (var m in meds) {
-      if (m.isMuted) continue;
-      final q = m.totalQuantity;
-      if (q == 0) {
+    for (var m in allMeds) {
+      final hasExpired = m.expiries.any((e) => e.expiryDate.isBefore(now));
+      if (hasExpired) {
+        expired.add(m);
+      } else if (m.totalQuantity == 0) {
         qtyZero.add(m);
-      } else if (q > 0 && q <= 60) {
+      } else if (m.totalQuantity <= 60) {
         qtyLow.add(m);
-      }
-
-      for (var e in m.expiries) {
-        if (e.expiryDate == null) continue;
-        if (e.expiryDate!.isBefore(now) && !expired.contains(m)) {
-          expired.add(m);
-        }
       }
     }
 
@@ -284,13 +275,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          ...qtyLow
-              .map((m) => _buildSpecialTile(
-                    m,
-                    'الكمية: ${m.totalQuantity}',
-                    AppColors.warning,
-                  ))
-              ,
+          ...qtyLow.map((m) => _buildSpecialTile(m, 'الكمية: ${m.totalQuantity}', AppColors.warning)),
           const SizedBox(height: 12),
         ],
         if (expired.isNotEmpty) ...[
@@ -302,15 +287,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          ...expired.map((m) {
-            final dates = m.expiries
-                .where((e) =>
-                    e.expiryDate != null && e.expiryDate!.isBefore(now))
-                .map((e) => DateFormat('yyyy-MM-dd').format(e.expiryDate!))
-                .toList();
-            final subtitle = 'منتهت صلاحية دفعات: ${dates.join(', ')}';
-            return _buildSpecialTile(m, subtitle, AppColors.danger);
-          }),
+          ...expired.map((m) => _buildSpecialTile(m, 'منتهية الصلاحية', AppColors.danger)),
         ],
         if (qtyZero.isEmpty && qtyLow.isEmpty && expired.isEmpty)
           const Text(
@@ -321,7 +298,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  /// بطاقة دواء “حرج”
   Widget _buildSpecialTile(Medicine m, String subtitle, Color color) {
     return Card(
       color: color.withOpacity(0.1),
@@ -345,14 +321,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
         trailing: IconButton(
           icon: Icon(
-            m.isMuted ? Icons.volume_off : Icons.notifications_active,
-            color: m.isMuted ? Colors.grey : color,
+            Icons.volume_off,
+            color: color,
           ),
-          onPressed: () => store.toggleMute(m.id),
-          tooltip: m.isMuted ? 'إلغاء كتم التنبيه' : 'كتم التنبيه',
+          onPressed: () async {
+            await store.toggleMute(m.id!);
+            setState(() {});
+          },
+          tooltip: 'كتم التنبيه',
         ),
         onTap: () {
-          // يمكن فتح شاشة التفاصيل هنا إذا رغبنا
+          // فتح شاشة التفاصيل إذا رغبنا
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MedicineDetailScreen(medicine: m),
+            ),
+          ).then((_) => _refreshData());
         },
       ),
     );

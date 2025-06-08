@@ -1,3 +1,5 @@
+// lib/screens/main_menu_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -50,7 +52,7 @@ class MainMenuScreen extends StatelessWidget {
           if (constraints.maxWidth > 600) {
             aspectRatio = 1.5; // شبكات 3 أعمدة
           } else {
-            aspectRatio = 1.1; // شبكات 2 عمود → ارتفاع أكبر أكثر من السابق
+            aspectRatio = 1.1; // شبكات 2 عمود → ارتفاع أكبر
           }
 
           return GridView.count(
@@ -91,8 +93,22 @@ class MainMenuScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => AddMedicineScreen(
-                        onAdd: (newMed) {
-                          store.addMedicine(newMed);
+                        onAdd: (newMed) async {
+                          // أولًا: إضافة الدواء (إرجاع المعرف الجديد)
+                          final newId = await store.addMedicine(
+                            name: newMed.name,
+                            category: newMed.category,
+                            price: newMed.price,
+                            company: newMed.company,
+                          );
+                          // ثانيًا: إضافة الدفعات التابعة لهذا الدواء
+                          for (var batch in newMed.expiries) {
+                            await store.addBatch(
+                              medicineId: newId,
+                              expiryDate: batch.expiryDate,
+                              quantity: batch.quantity,
+                            );
+                          }
                         },
                       ),
                     ),

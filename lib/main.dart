@@ -13,13 +13,19 @@ import 'services/settings_store.dart';
 import 'services/local_notifications_service.dart';
 import 'services/workmanager_callback.dart';
 
-// مفتاح الـ Navigator لتمريره إلى خدمة الإشعارات
+import 'screens/home_screen.dart';
+
+/// مفتاح الـ Navigator لتمريره إلى خدمة الإشعارات
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
+  // رسالة تتبع للتأكد من وصول التنفيذ إلى هنا
+  debugPrint("🚀 main() started");
+
   WidgetsFlutterBinding.ensureInitialized();
 
   // 1. تهيئة WorkManager
+  debugPrint("🔧 Initializing WorkManager…");
   Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: false,
@@ -31,11 +37,15 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
     initialDelay: const Duration(minutes: 1),
   );
+  debugPrint("✅ WorkManager initialized");
 
   // 2. تهيئة الإشعارات المحلية
+  debugPrint("🔔 Initializing LocalNotificationsService…");
   await LocalNotificationsService.initialize(navigatorKey);
+  debugPrint("✅ LocalNotificationsService initialized");
 
   // 3. جدولة تذكير صباحي عند 8:00
+  debugPrint("🗓 Scheduling daily reminder at 08:00…");
   await LocalNotificationsService.scheduleDailyReminder(
     id: 500,
     hour: 8,
@@ -44,15 +54,22 @@ Future<void> main() async {
     body: 'اضغط للاطلاع على التنبيهات',
     payload: 'go_to_notifications',
   );
+  debugPrint("✅ Daily reminder scheduled");
 
   // 4. إنشاء كائن قاعدة البيانات
+  debugPrint("🗄 Opening AppDatabase…");
   final database = AppDatabase();
+  debugPrint("✅ AppDatabase created");
 
   // 5. تهيئة MedicineStore باستخدام قاعدة البيانات
+  debugPrint("📦 Initializing MedicineStore…");
   final store = MedicineStore.instance(database);
+  debugPrint("✅ MedicineStore initialized");
 
   // 6. تهيئة SettingsStore
+  debugPrint("⚙️ Initializing SettingsStore…");
   final settings = SettingsStore();
+  debugPrint("✅ SettingsStore initialized");
 
   runApp(
     MultiProvider(
@@ -119,8 +136,7 @@ class PharmacyApp extends StatelessWidget {
           bodyMedium: AppTextStyles.body,
         ),
       ),
-      // تم تغيير HomeScreen إلى MainMenuScreen لأنّ الملف home_screen.dart غير موجود في المشروع
-      home: const MainMenuScreen(),
+      home: const HomeScreen(),
     );
   }
 }

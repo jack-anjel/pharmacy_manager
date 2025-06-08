@@ -1,7 +1,10 @@
+// lib/screens/all_medicines_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/medicine_store.dart';
+import '../models/medicine.dart';
 import 'medicine_detail_screen.dart';
 
 class AllMedicinesScreen extends StatelessWidget {
@@ -12,7 +15,7 @@ class AllMedicinesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<MedicineStore>();
-    final all = store.medicines;
+    final all = store.medicines; // قائمة الموديلات الشخصية
 
     return Scaffold(
       appBar: AppBar(title: const Text('كل الأدوية')),
@@ -45,12 +48,15 @@ class AllMedicinesScreen extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (_) => MedicineDetailScreen(
                           medicine: m,
-                          onUpdate: () {
-                            store.updateMedicine();
+                          onUpdate: (updatedMed) {
+                            // عند العودة من شاشة التفاصيل مع موديل محدث
+                            store.updateMedicine(updatedMed);
                           },
                           onDelete: () {
-                            store.deleteMedicine(m.id);
-                            Navigator.of(context).pop();
+                            if (m.id != null) {
+                              store.deleteMedicine(m.id!);
+                              Navigator.of(context).pop();
+                            }
                           },
                         ),
                       ),

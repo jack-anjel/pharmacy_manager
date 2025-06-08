@@ -1,12 +1,14 @@
-import 'dart:async';
+// lib/screens/search_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../services/medicine_store.dart';
 import '../services/settings_store.dart';
-import '../models/medicine.dart';
+import '../models/medicine.dart' as model;
+import '../models/expiry_batch.dart' as batch_model;
 import '../theme/design_system.dart';
 import 'medicine_detail_screen.dart';
 import 'add_medicine_screen.dart';
@@ -29,12 +31,14 @@ class _SearchScreenState extends State<SearchScreen> {
   SortBy _sortBy = SortBy.name;
   bool _ascending = true;
 
-  List<Medicine> filtered = [];
+  List<model.Medicine> filtered = [];
 
   @override
   void initState() {
     super.initState();
-    filtered = [];
+    _searchCtrl.addListener(() {
+      _onSearchChanged(_searchCtrl.text);
+    });
   }
 
   @override
@@ -63,77 +67,76 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void applySearchAndFilter() {
-    final store = context.read<MedicineStore>();
-    final allMeds = store.medicines;
+    final store = Provider.of<MedicineStore>(context, listen: false);
+    final allMeds = store.medicines; // List<model.Medicine>
+
     final query = _searchCtrl.text.trim().toLowerCase();
     final now = DateTime.now();
 
+    // 1. تصفية بناءً على الاختيارات
+    List<model.Medicine> tempList = allMeds.where((m) {
+      // تصفية حسب المجموعة
+      final inGroup = (selectedGroup == 'كل المجموعات' || m.category == selectedGroup);
+
+      // تصفية حسب الكمية أو الصلاحية
+      bool filterOk = true;
+      if (filterBy == 'الكمية ≤ 60') {
+        filterOk = m.totalQuantity <= 60;
+      } else if (filterBy == 'صلاحية ≤ 180 يوم') {
+        filterOk = m.expiries.any((e) {
+          final diff = e.expiryDate.difference(now).inDays;
+          return diff <= 180;
+        });
+      }
+
+      // تصفية حسب نص البحث
+      bool matches = query.isEmpty;
+      if (query.isNotEmpty) {
+        final nameMatch = m.name.toLowerCase().contains(query);
+        final catMatch = m.category.toLowerCase().contains(query);
+        final dateMatch = m.expiries.any((e) {
+          final d = e.expiryDate;
+          final str1 = DateFormat('yyyy-MM-dd').format(d);
+          final str2 = DateFormat('dd/MM/yyyy').format(d);
+          return str1.contains(query) || str2.contains(query);
+        });
+        matches = nameMatch || catMatch || dateMatch;
+      }
+
+      return inGroup && filterOk && matches;
+    }).toList();
+
+    // 2. ترتيب النتائج حسب المحدد
+    tempList.sort((a, b) {
+      int cmp = 0;
+      switch (_sortBy) {
+        case SortBy.name:
+          cmp = a.name.compareTo(b.name);
+          break;
+        case SortBy.quantity:
+          cmp = a.totalQuantity.compareTo(b.totalQuantity);
+          break;
+        case SortBy.expiry:
+          DateTime aMin = DateTime(9999);
+          if (a.expiries.isNotEmpty) {
+            aMin = a.expiries
+                .map((e) => e.expiryDate)
+                .reduce((v, e) => v.isBefore(e) ? v : e);
+          }
+          DateTime bMin = DateTime(9999);
+          if (b.expiries.isNotEmpty) {
+            bMin = b.expiries
+                .map((e) => e.expiryDate)
+                .reduce((v, e) => v.isBefore(e) ? v : e);
+          }
+          cmp = aMin.compareTo(bMin);
+          break;
+      }
+      return _ascending ? cmp : -cmp;
+    });
+
     setState(() {
-      filtered = allMeds.where((m) {
-        final inGroup =
-            (selectedGroup == 'كل المجموعات' || m.category == selectedGroup);
-
-        bool filterOk = true;
-        if (filterBy == 'الكمية ≤ 60') {
-          filterOk = m.totalQuantity <= 60;
-        } else if (filterBy == 'صلاحية ≤ 180 يوم') {
-          filterOk = m.expiries.any((e) {
-            if (e.expiryDate == null) return false;
-            final diff = e.expiryDate!.difference(now).inDays;
-            return diff <= 180;
-          });
-        }
-
-        bool matches = query.isEmpty;
-        if (query.isNotEmpty) {
-          final nameMatch = m.name.toLowerCase().contains(query);
-          final catMatch = m.category.toLowerCase().contains(query);
-          final dateMatch = m.expiries.any((e) {
-            if (e.expiryDate == null) return false;
-            final d = e.expiryDate!;
-            final str1 = DateFormat('yyyy-MM-dd').format(d);
-            final str2 = DateFormat('dd/MM/yyyy').format(d);
-            return str1.contains(query) || str2.contains(query);
-          });
-          matches = nameMatch || catMatch || dateMatch;
-        }
-
-        return inGroup && filterOk && matches;
-      }).toList();
-
-      filtered.sort((a, b) {
-        int cmp = 0;
-        switch (_sortBy) {
-          case SortBy.name:
-            cmp = a.name.compareTo(b.name);
-            break;
-          case SortBy.quantity:
-            cmp = a.totalQuantity.compareTo(b.totalQuantity);
-            break;
-          case SortBy.expiry:
-            DateTime aMin = DateTime(9999);
-            if (a.expiries.isNotEmpty) {
-              final datesA = a.expiries
-                  .where((e) => e.expiryDate != null)
-                  .map((e) => e.expiryDate!);
-              if (datesA.isNotEmpty) {
-                aMin = datesA.reduce((v, e) => v.isBefore(e) ? v : e);
-              }
-            }
-            DateTime bMin = DateTime(9999);
-            if (b.expiries.isNotEmpty) {
-              final datesB = b.expiries
-                  .where((e) => e.expiryDate != null)
-                  .map((e) => e.expiryDate!);
-              if (datesB.isNotEmpty) {
-                bMin = datesB.reduce((v, e) => v.isBefore(e) ? v : e);
-              }
-            }
-            cmp = aMin.compareTo(bMin);
-            break;
-        }
-        return _ascending ? cmp : -cmp;
-      });
+      filtered = tempList;
     });
   }
 
@@ -162,13 +165,16 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<MedicineStore>();
-    final cats = context.watch<SettingsStore>().categories;
+    final store = Provider.of<MedicineStore>(context);
+    final cats = Provider.of<SettingsStore>(context).categories;
 
+    // إعداد عدّادات الفئات
     final groupCounts = <String, int>{
-      'كل المجموعات': store.medicines.length,
+      'كل المجموعات': filtered.isEmpty ? store.medicines.length : filtered.length,
       for (var c in cats)
-        c: store.medicines.where((m) => m.category == c).length,
+        c: filtered.isEmpty
+            ? store.medicines.where((m) => m.category == c).length
+            : filtered.where((m) => m.category == c).length,
     };
 
     return Scaffold(
@@ -183,8 +189,22 @@ class _SearchScreenState extends State<SearchScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => AddMedicineScreen(onAdd: (newMed) {
-                    store.addMedicine(newMed);
+                  builder: (_) => AddMedicineScreen(onAdd: (newMed) async {
+                    // إضافة الدواء ثم الدفعات
+                    final newId = await store.addMedicine(
+                      name: newMed.name,
+                      category: newMed.category,
+                      price: newMed.price,
+                      company: newMed.company,
+                    );
+                    for (var batch in newMed.expiries) {
+                      await store.addBatch(
+                        medicineId: newId,
+                        expiryDate: batch.expiryDate,
+                        quantity: batch.quantity,
+                      );
+                    }
+                    applySearchAndFilter();
                   }),
                 ),
               );
@@ -222,11 +242,10 @@ class _SearchScreenState extends State<SearchScreen> {
                       BorderRadius.circular(AppSpacing.borderRadius),
                 ),
               ),
-              onChanged: _onSearchChanged,
             ),
           ),
 
-          // ChoiceChips للفئات
+          // شريط اختيار الفئة
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding:
@@ -277,7 +296,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: AppSpacing.margin / 2),
 
-          // ChoiceChips للفلترة حسب الكمية/الصلاحية
+          // شريط اختيار الفلترة الكمية/صلاحية
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.margin),
             child: Wrap(
@@ -333,7 +352,7 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: AppSpacing.margin / 2),
 
-          // Dropdown للترتيب وعكس الترتيب + عدد النتائج
+          // ترتيب النتائج وعكس الترتيب وعددها
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.margin),
             child: Row(
@@ -381,14 +400,12 @@ class _SearchScreenState extends State<SearchScreen> {
           const Divider(),
           const SizedBox(height: 6),
 
-          // عرض النتائج
+          // عرض قائمة النتائج
           Expanded(
             child: filtered.isEmpty
                 ? Center(
                     child: Text(
-                      _searchCtrl.text.isEmpty
-                          ? 'لا توجد نتائج'
-                          : 'لم يتم العثور على دواء',
+                      _searchCtrl.text.isEmpty ? 'لا توجد نتائج' : 'لم يتم العثور على دواء',
                       style: AppTextStyles.body,
                     ),
                   )
@@ -398,13 +415,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     itemBuilder: (context, index) {
                       final med = filtered[index];
 
-                      // إيجاد أقرب تاريخ أو منتهٍ
+                      // إيجاد أقرب تاريخ صلاحية
                       DateTime? nearestExpiry;
                       for (var e in med.expiries) {
-                        if (e.expiryDate == null) continue;
-                        final d = e.expiryDate!;
-                        if (nearestExpiry == null ||
-                            d.isBefore(nearestExpiry)) {
+                        final d = e.expiryDate;
+                        if (nearestExpiry == null || d.isBefore(nearestExpiry)) {
                           nearestExpiry = d;
                         }
                       }
@@ -412,7 +427,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ? DateFormat('yyyy-MM-dd').format(nearestExpiry)
                           : '—';
 
-                      // تحديد الأيقونة واللون وفق الحالة
+                      // اختيار أيقونة ولون الحالة
                       IconData statusIcon;
                       Color statusColor;
                       if (med.totalQuantity == 0) {
@@ -439,42 +454,32 @@ class _SearchScreenState extends State<SearchScreen> {
                           vertical: AppSpacing.margin / 2,
                         ),
                         child: GestureDetector(
-                          onTap: () async {
-                            await Navigator.push(
+                          onTap: () {
+                            Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => MedicineDetailScreen(
                                   medicine: med,
-                                  onUpdate: () {
-                                    store.updateMedicine();
-                                  },
-                                  onDelete: () {
-                                    store.deleteMedicine(med.id);
-                                    Navigator.of(context).pop();
-                                  },
                                 ),
                               ),
-                            );
-                            applySearchAndFilter();
+                            ).then((_) => applySearchAndFilter());
                           },
                           child: Card(
                             color: AppColors.cardBackground,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                  AppSpacing.borderRadius),
+                              borderRadius:
+                                  BorderRadius.circular(AppSpacing.borderRadius),
                             ),
                             elevation: 2,
                             child: Padding(
                               padding: const EdgeInsets.all(AppSpacing.padding),
                               child: Row(
                                 children: [
-                                  Icon(statusIcon,
-                                      size: 28, color: statusColor),
+                                  Icon(statusIcon, size: 28, color: statusColor),
                                   const SizedBox(width: AppSpacing.padding),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         RichText(
                                           text: TextSpan(

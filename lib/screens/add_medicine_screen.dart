@@ -1,13 +1,17 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+// lib/screens/add_medicine_screen.dart
 
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+
+import '../services/medicine_store.dart';
+import '../services/settings_store.dart';
 import '../models/medicine.dart';
 import '../models/expiry_batch.dart';
-import '../services/settings_store.dart';
 import '../theme/design_system.dart';
 
 class AddMedicineScreen extends StatefulWidget {
+  /// عند الضغط على "حفظ"، نمرّر موديل Medicine للمستدعي (الذي بدوره سيقوم بإرساله إلى MedicineStore)
   final void Function(Medicine) onAdd;
   const AddMedicineScreen({super.key, required this.onAdd});
 
@@ -18,16 +22,16 @@ class AddMedicineScreen extends StatefulWidget {
 class _AddMedicineScreenState extends State<AddMedicineScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // ──── حقول النموذج ────
+  // حقول النموذج
   final TextEditingController nameCtrl = TextEditingController();
   String? selectedCategory;
   final TextEditingController priceCtrl = TextEditingController();
   final TextEditingController companyCtrl = TextEditingController();
 
-  // قائمة دفعات الصلاحية المؤقتة
+  // قائمة دفعات الصلاحية المؤقتة (domain model)
   List<ExpiryBatch> expiries = [];
 
-  // للتحكم بحوار إضافة دفعة
+  // لإدخال دفعة جديدة
   final TextEditingController _expiryInputController = TextEditingController();
   final TextEditingController _quantityInputController = TextEditingController();
   DateTime? _pickedDate;
@@ -37,7 +41,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
   @override
   void initState() {
     super.initState();
-    // في البداية، نعطي القيمة الأولى من قائمة الفئات بعد تحميل SettingsStore
     final cats = context.read<SettingsStore>().categories;
     selectedCategory = cats.isNotEmpty ? cats.first : null;
   }
@@ -108,7 +111,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // حقل نصي للتاريخ مع أيقونة لفتح DatePicker
               TextField(
                 controller: _expiryInputController,
                 decoration: InputDecoration(
@@ -140,7 +142,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // حقل نصي لإدخال الكمية
               TextField(
                 controller: _quantityInputController,
                 decoration: const InputDecoration(
@@ -154,13 +155,13 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(ctx).pop(); // إغلاق دون إضافة
+                Navigator.of(ctx).pop();
               },
               child: const Text('إلغاء'),
             ),
             TextButton(
               onPressed: () {
-                Navigator.of(ctx).pop(); // إغلاق ثم معالجة البيانات
+                Navigator.of(ctx).pop();
               },
               child: const Text('إضافة'),
             ),
@@ -213,11 +214,16 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
       }
       finalDate = parsed;
     } else {
-      finalDate = null;
+      finalDate = DateTime.now();
     }
 
     setState(() {
-      expiries.add(ExpiryBatch(expiryDate: finalDate, quantity: qty));
+      expiries.add(ExpiryBatch(
+        id: null,
+        medicineId: 0, // سيتم تعديل medicineId لاحقًا عند الإدخال في DB
+        expiryDate: finalDate!,
+        quantity: qty,
+      ));
       _markEdited();
     });
   }
@@ -239,14 +245,20 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
     }
 
     final newMed = Medicine(
-      id: DateTime.now().millisecondsSinceEpoch,
+      id: null,
       name: nameCtrl.text.trim(),
       category: selectedCategory!,
       price: priceCtrl.text.trim().isEmpty ? null : priceCtrl.text.trim(),
-      company: companyCtrl.text.trim().isEmpty
-          ? null
-          : companyCtrl.text.trim(),
-      expiries: [...expiries],
+      company:
+          companyCtrl.text.trim().isEmpty ? null : companyCtrl.text.trim(),
+      expiries: expiries
+          .map((e) => ExpiryBatch(
+                id: null,
+                medicineId: 0,
+                expiryDate: e.expiryDate,
+                quantity: e.quantity,
+              ))
+          .toList(),
       isMuted: false,
     );
 
@@ -316,7 +328,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // اسم الدواء
                 TextFormField(
                   controller: nameCtrl,
                   decoration: const InputDecoration(
@@ -331,8 +342,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-
-                // قائمة اختيار الفئة
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -355,8 +364,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-
-                // حقل السعر (اختياري)
                 TextFormField(
                   controller: priceCtrl,
                   keyboardType:
@@ -367,8 +374,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // حقل الشركة (اختياري)
                 TextFormField(
                   controller: companyCtrl,
                   decoration: const InputDecoration(
@@ -377,8 +382,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // زر مسح جميع الدفعات
                 if (expiries.isNotEmpty)
                   Align(
                     alignment: Alignment.centerRight,
@@ -396,8 +399,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                       ),
                     ),
                   ),
-
-                // قسم إضافة دفعات الصلاحية والكمية
+                const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -413,8 +415,6 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-
-                // عرض الدفعات
                 if (expiries.isEmpty)
                   const Text('لم تتم إضافة أي دفعة حتى الآن.')
                 else
@@ -432,9 +432,8 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                       } else if (diff <= 30) {
                         tileColor = Colors.orange.withOpacity(0.1);
                       }
-                                          final formatted = e.expiryDate != null
-                          ? DateFormat('yyyy-MM-dd').format(e.expiryDate)
-                          : '—';
+                      final formatted =
+                          DateFormat('yyyy-MM-dd').format(e.expiryDate);
 
                       return Dismissible(
                         key: Key('expiry_${i}_${formatted}_${e.quantity}'),
@@ -442,10 +441,9 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                         background: Container(
                           color: Colors.red,
                           alignment: Alignment.centerRight,
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 20),
-                          child:
-                              const Icon(Icons.delete, color: Colors.white),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: const Icon(Icons.delete,
+                              color: Colors.white),
                         ),
                         onDismissed: (_) {
                           setState(() {
@@ -475,10 +473,7 @@ class _AddMedicineScreenState extends State<AddMedicineScreen> {
                       );
                     },
                   ),
-
                 const SizedBox(height: 20),
-
-                // أزرار الحفظ
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [

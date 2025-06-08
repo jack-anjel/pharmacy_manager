@@ -33,8 +33,7 @@ class MedicineStore extends ChangeNotifier {
       }
       // 2) فحص الصلاحية
       for (var e in m.expiries) {
-        if (e.expiryDate == null) continue;
-        final d = e.expiryDate!;
+        final d = e.expiryDate;
         final diff = d.difference(now).inDays;
         if (d.isBefore(now) || (diff > 0 && diff <= 180)) {
           final key = 'expiry-${m.id}-${d.toIso8601String()}';

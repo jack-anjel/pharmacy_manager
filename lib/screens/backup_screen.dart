@@ -1,6 +1,9 @@
+// lib/screens/backup_screen.dart
+
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -11,7 +14,7 @@ import '../models/medicine.dart';
 import '../models/expiry_batch.dart';
 import '../theme/design_system.dart';
 
-/// شاشة للنسخ الاحتياطي (تصدير CSV/JSON) والاستعادة (استيراد CSV/JSON).
+/// شاشة للنسخ الاحتياطي (تصدير JSON/CSV) والاستعادة (استيراد JSON/CSV).
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
 
@@ -24,7 +27,6 @@ class _BackupScreenState extends State<BackupScreen> {
 
   Future<Directory?> _getDownloadsDirectory() async {
     if (Platform.isAndroid) {
-      // طلب إذن الكتابة على التخزين الخارجي
       final status = await Permission.storage.request();
       if (!status.isGranted) {
         return null;
@@ -46,9 +48,13 @@ class _BackupScreenState extends State<BackupScreen> {
       _isProcessing = true;
     });
     try {
-      final store = MedicineStore.instance();
-      await store.loadAll();
-      final data = store.medicines.map((m) => m.toJson()).toList();
+      final store = Provider.of<MedicineStore>(context, listen: false);
+      final meds = store.medicines; // List<Medicine> (موديلاتنا الشخصية)
+
+      // نصدر قائمة من خرائط JSON مباشرةً
+      final List<Map<String, dynamic>> data =
+          meds.map((m) => m.toJson()).toList();
+
       final jsonString = const JsonEncoder.withIndent('  ').convert(data);
 
       final dir = await _getDownloadsDirectory();
@@ -79,11 +85,10 @@ class _BackupScreenState extends State<BackupScreen> {
       _isProcessing = true;
     });
     try {
-      final store = MedicineStore.instance();
-      await store.loadAll();
+      final store = Provider.of<MedicineStore>(context, listen: false);
       final meds = store.medicines;
 
-      // رأس CSV
+      // رؤوس الأعمدة
       final headers = [
         'id',
         'name',
@@ -94,15 +99,13 @@ class _BackupScreenState extends State<BackupScreen> {
         'quantity',
         'isMuted'
       ];
-      final buffer = StringBuffer()
-        ..writeln(headers.join(','));
+      final buffer = StringBuffer()..writeln(headers.join(','));
 
-      // نكتب سطرًا لكل دفعة (batch) مع معلومات الدواء
       for (var m in meds) {
         if (m.expiries.isEmpty) {
-          // إذا لا توجد دفعات، نكتب صفًا فارغًا للدفعة
+          // صف بدون دفعات
           final fields = [
-            m.id.toString(),
+            m.id?.toString() ?? '',
             '"${m.name}"',
             '"${m.category}"',
             m.price == null ? '' : '"${m.price!}"',
@@ -113,11 +116,11 @@ class _BackupScreenState extends State<BackupScreen> {
           ];
           buffer.writeln(fields.join(','));
         } else {
+          // صف لكل دفعة
           for (var e in m.expiries) {
-            final expiryStr =
-                e.expiryDate == null ? '' : e.expiryDate!.toIso8601String();
+            final expiryStr = e.expiryDate.toIso8601String();
             final fields = [
-              m.id.toString(),
+              m.id?.toString() ?? '',
               '"${m.name}"',
               '"${m.category}"',
               m.price == null ? '' : '"${m.price!}"',
@@ -169,22 +172,36 @@ class _BackupScreenState extends State<BackupScreen> {
       final content = await file.readAsString();
       final list = jsonDecode(content) as List<dynamic>;
 
+      // نحوّل كل عنصر إلى Medicine شخصي
       final imported = <Medicine>[];
       for (var item in list) {
         try {
           imported.add(Medicine.fromJson(item as Map<String, dynamic>));
         } catch (_) {
-          // نتجاهل أي عنصرٍ غير صالح
+          // نتجاهل العناصر غير الصالحة
         }
       }
       if (imported.isEmpty) {
         throw Exception('لم يتم العثور على بيانات صالحة في الملف');
       }
 
-      final store = MedicineStore.instance();
-      store.medicines = imported;
-      await store.saveMedicines();
-      setState(() {}); // لإعادة تحميل واجهة المستخدم
+      final store = Provider.of<MedicineStore>(context, listen: false);
+      for (var m in imported) {
+        final newMedId = await store.addMedicine(
+          name: m.name,
+          category: m.category,
+          price: m.price,
+          company: m.company,
+        );
+        for (var e in m.expiries) {
+          await store.addBatch(
+            medicineId: newMedId,
+            expiryDate: e.expiryDate,
+            quantity: e.quantity,
+          );
+        }
+      }
+      setState(() {});
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم استيراد البيانات بنجاح')),
@@ -217,38 +234,43 @@ class _BackupScreenState extends State<BackupScreen> {
         throw Exception('الملف فارغ');
       }
 
-      // نقرأ الرأس (headers) ونتجاهلها
       final header = lines.first.split(',');
       final dataLines = lines.skip(1);
-      final Map<int, Medicine> tempMap = {};
+      final Map<int, _TempMedicine> tempMap = {};
 
       for (var raw in dataLines) {
-        // تقطيع الـ CSV واحترام علامات الاقتباس إن وجدت
         final parts = _parseCsvLine(raw);
         if (parts.length < 8) continue;
 
-        final id = int.tryParse(parts[0]) ?? DateTime.now().millisecondsSinceEpoch;
+        final id = int.tryParse(parts[0]) ??
+            DateTime.now().millisecondsSinceEpoch; // معرف وهمي في حال التعذّر
         final name = parts[1].replaceAll('"', '');
         final category = parts[2].replaceAll('"', '');
         final price = parts[3].isEmpty ? null : parts[3].replaceAll('"', '');
-        final company = parts[4].isEmpty ? null : parts[4].replaceAll('"', '');
+        final company =
+            parts[4].isEmpty ? null : parts[4].replaceAll('"', '');
         final expiryStr = parts[5].replaceAll('"', '');
         final qty = int.tryParse(parts[6]) ?? 0;
         final isMuted = parts[7] == '1';
 
         final expiryDate =
-            expiryStr.isEmpty ? null : DateTime.tryParse(expiryStr);
-        final batch = ExpiryBatch(expiryDate: expiryDate, quantity: qty);
+            expiryStr.isEmpty ? DateTime.now() : DateTime.tryParse(expiryStr) ?? DateTime.now();
+        final batch = ExpiryBatch(
+          id: null,
+          medicineId: id,
+          expiryDate: expiryDate,
+          quantity: qty,
+        );
 
         if (!tempMap.containsKey(id)) {
-          tempMap[id] = Medicine(
+          tempMap[id] = _TempMedicine(
             id: id,
             name: name,
             category: category,
             price: price,
             company: company,
-            expiries: [batch],
             isMuted: isMuted,
+            expiries: [batch],
           );
         } else {
           tempMap[id]!.expiries.add(batch);
@@ -260,9 +282,22 @@ class _BackupScreenState extends State<BackupScreen> {
         throw Exception('لم يتم العثور على بيانات صالحة في الملف');
       }
 
-      final store = MedicineStore.instance();
-      store.medicines = imported;
-      await store.saveMedicines();
+      final store = Provider.of<MedicineStore>(context, listen: false);
+      for (var m in imported) {
+        final newMedId = await store.addMedicine(
+          name: m.name,
+          category: m.category,
+          price: m.price,
+          company: m.company,
+        );
+        for (var e in m.expiries) {
+          await store.addBatch(
+            medicineId: newMedId,
+            expiryDate: e.expiryDate,
+            quantity: e.quantity,
+          );
+        }
+      }
       setState(() {});
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -279,7 +314,6 @@ class _BackupScreenState extends State<BackupScreen> {
     }
   }
 
-  /// دالة مساعدة لتقطيع سطر CSV يأخذ بعين الاعتبار علامات الاقتباس
   List<String> _parseCsvLine(String line) {
     final result = <String>[];
     final buffer = StringBuffer();
@@ -320,7 +354,7 @@ class _BackupScreenState extends State<BackupScreen> {
                 backgroundColor: Colors.teal[700],
                 padding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-              ),  
+              ),
             ),
             const SizedBox(height: AppSpacing.margin),
             ElevatedButton.icon(
@@ -365,4 +399,25 @@ class _BackupScreenState extends State<BackupScreen> {
       ),
     );
   }
+}
+
+/// نموذج مساعدة مؤقت عند استيراد CSV
+class _TempMedicine {
+  final int id;
+  final String name;
+  final String category;
+  final String? price;
+  final String? company;
+  final bool isMuted;
+  List<ExpiryBatch> expiries;
+
+  _TempMedicine({
+    required this.id,
+    required this.name,
+    required this.category,
+    this.price,
+    this.company,
+    required this.isMuted,
+    required this.expiries,
+  });
 }

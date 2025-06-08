@@ -1,3 +1,5 @@
+// lib/screens/settings_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -31,7 +33,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          // بند إدارة الفئات
           ListTile(
             leading: const Icon(Icons.category, color: AppColors.primary),
             title: const Text('إدارة الفئات'),
@@ -43,7 +44,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          // بند النسخ الاحتياطي/الاستعادة
           ListTile(
             leading: const Icon(Icons.backup, color: AppColors.primary),
             title: const Text('نسخ احتياطي / استعادة'),
